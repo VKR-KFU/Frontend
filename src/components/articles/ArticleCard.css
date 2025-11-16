@@ -1,0 +1,105 @@
+﻿/* контейнер списка, чтобы был нормальный отступ между карточками */
+.results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+/* сама карточка */
+.article-card {
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition:
+            box-shadow 0.2s ease,
+            transform 0.2s ease,
+            border-color 0.2s ease,
+            background-color 0.2s ease;
+}
+
+.article-card:hover {
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+    transform: translateY(-1px);
+    border-color: #3b82f6;
+    background-color: #f9fafb;
+}
+
+/* заголовок + год */
+.article-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.article-card__title {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.article-card__year {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+/* авторы / вуз */
+.article-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.article-card__dot::before {
+    content: "•";
+}
+
+/* теговые бейджи */
+.article-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.article-card__tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #4f46e5;
+    border: 1px solid rgba(79, 70, 229, 0.25);
+    white-space: nowrap;
+}
+
+.article-card__tag--secondary {
+    background: #ecfeff;
+    color: #0891b2;
+    border-color: rgba(8, 145, 178, 0.25);
+}
+
+.article-card__tag--ghost {
+    background: #f9fafb;
+    color: #6b7280;
+    border-color: rgba(148, 163, 184, 0.6);
+}
+
+.article-card__author--missing {
+    font-style: italic;
+    color: #9ca3af;
+}

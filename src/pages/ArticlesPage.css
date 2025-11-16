@@ -1,0 +1,73 @@
+﻿.articles-page {
+    min-height: 100vh;
+    background: #f4f6fb;
+    padding: 24px 16px 40px;
+}
+
+.articles-page__header {
+    max-width: 1200px;
+    margin: 0 auto 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.articles-page__search {
+    flex: 1;
+}
+
+.articles-page__filters-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #eef2ff;
+    color: #1d4ed8;
+    cursor: pointer;
+}
+
+.articles-page__results {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* модалка */
+
+.articles-filters-modal__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+
+.articles-filters-modal {
+    width: min(640px, 100% - 32px);
+    max-height: 80vh;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35);
+    display: flex;
+    flex-direction: column;
+}
+
+.articles-filters-modal__header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.articles-filters-modal__body {
+    padding: 16px 20px 20px;
+    overflow-y: auto;
+}
+
+.articles-filters-modal__close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 18px;
+}
