@@ -78,11 +78,15 @@ function ArticleFilters({
 
                 <label className="filter-label">
                     <span>Источник (eLibrary, CyberLenin)</span>
-                    <input
+                    <select
                         className="input-text input-text-sm"
-                        value={source}
+                        value={source || ""}
                         onChange={(e) => onChange("source", e.target.value)}
-                    />
+                    >
+                        <option value="">Любой источник</option>
+                        <option value="ELibrary">eLibrary</option>
+                        <option value="CyberLenin">CyberLenin</option>
+                    </select>
                 </label>
 
                 <label className="filter-label">
