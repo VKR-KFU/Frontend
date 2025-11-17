@@ -1,0 +1,9 @@
+﻿.article-search-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.article-search-bar__input {
+    flex: 1;
+}

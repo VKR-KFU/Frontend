@@ -5,19 +5,51 @@ import ArticleFilters from "../components/articles/ArticleFilters";
 import ArticleCard from "../components/articles/ArticleCard";
 import Pagination from "../components/common/Pagination";
 import "./ArticlesPage.css";
+import {useNavigate} from "react-router-dom";
 
 const PAGE_SIZE = 20;
 
 const INITIAL_FILTERS = {
+    // Автор
     authorName: "",
     authorOrg: "",
     authorDepartment: "",
     authorSpin: "",
+
+    // Публикация / источник
     year: "",
     source: "",
     universityName: "",
     publicationType: "",
     language: "",
+    edn: "",
+
+    // Аннотации и ключевые слова
+    abstractRuText: "",
+    abstractEnText: "",
+    hasAbstractRu: false,
+    hasAbstractEn: false,
+    keywordsText: [],
+
+    // Индексация / классификация
+    isRinc: false,
+    isCoreRinc: false,
+    oecdCodeName: "",
+    asjcCodeName: "",
+    vakCodeName: "",
+    patents: "",
+
+    // Метрики
+    minViews: "",
+    minCitationsRinc: "",
+    minCitirovanieInCoreRinc: "",
+
+    // --- новое: Альтметрики ---
+    altmetricAllScoreMin: "",
+    altmetricViewsMin: "",
+    altmetricDownloadsMin: "",
+    altmetricIncludedInCollectionsMin: "",
+    altmetricTotalReviewsMin: ""
 };
 
 function ArticlesPage() {
@@ -38,6 +70,8 @@ function ArticlesPage() {
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
+    const navigate = useNavigate();
+
     const buildRequestBody = (pageToLoad) => {
         return {
             pageSize: PAGE_SIZE,
@@ -51,17 +85,57 @@ function ArticlesPage() {
                     organization: filters.authorOrg || undefined,
                 },
             ],
+            altmetric: {
+                allScoreMin: filters.altmetricAllScoreMin
+                    ? Number(filters.altmetricAllScoreMin)
+                    : undefined,
+                viewsMin: filters.altmetricViewsMin
+                    ? Number(filters.altmetricViewsMin)
+                    : undefined,
+                downloadsMin: filters.altmetricDownloadsMin
+                    ? Number(filters.altmetricDownloadsMin)
+                    : undefined,
+                includedInCollectionsMin: filters.altmetricIncludedInCollectionsMin
+                    ? Number(filters.altmetricIncludedInCollectionsMin)
+                    : undefined,
+                totalReviewsMin: filters.altmetricTotalReviewsMin
+                    ? Number(filters.altmetricTotalReviewsMin)
+                    : undefined,
+            },
             articleDetails: {
                 year: filters.year ? Number(filters.year) : undefined,
                 source: filters.source || undefined,
-                // по контракту у тебя UniersityName — с опечаткой
-                uniersityName: filters.universityName || undefined,
+                universityName: filters.universityName || undefined,
                 publicationType: filters.publicationType || undefined,
-                ruAnnotation: undefined,
-                enAnnotation: undefined,
-                patents: undefined,
-                edn: undefined,
+                edn: filters.edn || undefined,
+                patents: filters.patents || undefined,
+
+                // аннотации
+                // если нужен поиск по тексту — подставляешь текст
+                // если просто наличие — можно договориться с бэкендом о спец-значении
+                ruAnnotation: filters.abstractRuText || (filters.hasAbstractRu ? "__NOT_EMPTY__" : undefined),
+                enAnnotation: filters.abstractEnText || (filters.hasAbstractEn ? "__NOT_EMPTY__" : undefined),
+
+                // язык
                 language: filters.language || undefined,
+
+                // ключевые слова, индексация, классификация, метрики —
+                // тут просто накидываю поля, реальные названия подгони под контракт
+                keywords: filters.keywordsText || undefined,
+                isRinc: filters.isRinc || undefined,
+                isCoreRinc: filters.isCoreRinc || undefined,
+                oecdCodeName: filters.oecdCodeName || undefined,
+                asjcCodeName: filters.asjcCodeName || undefined,
+                vakCodeName: filters.vakCodeName || undefined,
+                minViews: filters.minViews
+                    ? Number(filters.minViews)
+                    : undefined,
+                minCitationsRinc: filters.minCitationsRinc
+                    ? Number(filters.minCitationsRinc)
+                    : undefined,
+                minCitirovanieInCoreRinc: filters.minCitirovanieInCoreRinc
+                    ? Number(filters.minCitirovanieInCoreRinc)
+                    : undefined,
             },
         };
     };
@@ -99,6 +173,12 @@ function ArticlesPage() {
         setIsFiltersOpen(false);
     };
 
+    const handleOpenProvider = (articleId, providerId, provider) => {
+        navigate(`/article/${articleId}`)
+        console.log("open provider details", articleId, providerId, provider);
+    };
+
+
     useEffect(() => {
         loadData(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,16 +193,9 @@ function ArticlesPage() {
                         title={title}
                         onChangeTitle={setTitle}
                         onSearch={() => loadData(1)}
+                        onOpenFilters={() => setIsFiltersOpen(true)}
                     />
                 </div>
-
-                <button
-                    type="button"
-                    className="articles-page__filters-btn"
-                    onClick={() => setIsFiltersOpen(true)}
-                >
-                    Фильтры
-                </button>
             </div>
 
             {/* результаты поиска */}
@@ -140,7 +213,11 @@ function ArticlesPage() {
                 {!loading &&
                     !error &&
                     items.map((article) => (
-                        <ArticleCard key={article.id} article={article} />
+                        <ArticleCard
+                            key={article.id}
+                            article={article}
+                            onOpenProvider={handleOpenProvider}
+                        />
                     ))}
 
                 {!loading && !error && totalPages > 1 && (

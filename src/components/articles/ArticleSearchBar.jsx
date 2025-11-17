@@ -1,6 +1,7 @@
 ﻿import React from "react";
+import './ArticleSearchBar.css'
 
-function ArticleSearchBar({ title, onChangeTitle, onSearch }) {
+function ArticleSearchBar({ title, onChangeTitle, onSearch, onOpenFilters }) {
     return (
         <div className="search-bar">
             <div className="header-title">Поиск статей</div>
@@ -13,6 +14,14 @@ function ArticleSearchBar({ title, onChangeTitle, onSearch }) {
                 />
                 <button className="btn btn-primary" onClick={onSearch}>
                     Найти
+                </button>
+
+                <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={onOpenFilters}
+                >
+                    Фильтры
                 </button>
             </div>
         </div>

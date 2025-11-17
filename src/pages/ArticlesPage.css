@@ -26,48 +26,141 @@
 }
 
 .articles-page__results {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
     max-width: 1200px;
     margin: 0 auto;
 }
 
 /* модалка */
 
+/*.articles-filters-modal__backdrop {*/
+/*    position: fixed;*/
+/*    inset: 0;*/
+/*    background: rgba(15, 23, 42, 0.45);*/
+/*    display: flex;*/
+/*    align-items: center;*/
+/*    justify-content: center;*/
+/*    z-index: 50;*/
+/*}*/
+
+/*.articles-filters-modal {*/
+/*    width: min(640px, 100% - 32px);*/
+/*    max-height: 80vh;*/
+/*    background: #fff;*/
+/*    border-radius: 16px;*/
+/*    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35);*/
+/*    display: flex;*/
+/*    flex-direction: column;*/
+/*}*/
+
+/*.articles-filters-modal__header {*/
+/*    padding: 16px 20px;*/
+/*    border-bottom: 1px solid #e5e7eb;*/
+/*    display: flex;*/
+/*    justify-content: space-between;*/
+/*    align-items: center;*/
+/*}*/
+
+/*.articles-filters-modal__body {*/
+/*    padding: 16px 20px 20px;*/
+/*    overflow-y: auto;*/
+/*}*/
+
+/*.articles-filters-modal__close {*/
+/*    border: none;*/
+/*    background: transparent;*/
+/*    cursor: pointer;*/
+/*    font-size: 18px;*/
+/*}*/
+
+/* фоновая подложка — выравниваем по центру, но ближе к верху */
 .articles-filters-modal__backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.45);
+    background: rgba(0, 0, 0, 0.35);
     display: flex;
-    align-items: center;
     justify-content: center;
-    z-index: 50;
+    align-items: flex-start;
+    padding: 40px 24px;
+    z-index: 1000;
 }
 
+/* сама "большая карта" */
 .articles-filters-modal {
-    width: min(640px, 100% - 32px);
-    max-height: 80vh;
     background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    width: 100%;
+    max-width: 1200px;          /* широкий попап */
+    max-height: calc(100vh - 80px);
     display: flex;
     flex-direction: column;
 }
 
 .articles-filters-modal__header {
     padding: 16px 20px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e5e5;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
 }
 
 .articles-filters-modal__body {
     padding: 16px 20px 20px;
-    overflow-y: auto;
+    overflow: auto;             /* если совсем не влезет, скролл только внутри */
 }
 
-.articles-filters-modal__close {
-    border: none;
-    background: transparent;
+/* внутри попапа — сетка */
+.articles-filters-modal__body form,
+.articles-filters-modal__body .filters-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px 24px;
+}
+
+/* сами "строчки" с полем — карточки сетки */
+.articles-filters-modal__body .filter-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0; /* убираем лишние отступы, раз управляем gap'ами */
+}
+
+/* внизу блок кнопок — растянуть на всю ширину */
+.articles-filters-modal__body .filters-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.filters-section {
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    padding: 10px 12px 12px;
+}
+
+.filters-section__title {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: #555;
+}
+
+.filter-checkbox {
+    display: inline-flex;      /* или flex */
+    align-items: center;
+    gap: 6px;                  /* расстояние между чекбоксом и текстом */
+    margin: 4px 0;
     cursor: pointer;
-    font-size: 18px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* чтобы браузерные отступы не мешали */
+.filter-checkbox input[type="checkbox"] {
+    margin: 0;
 }
