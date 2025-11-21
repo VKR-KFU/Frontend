@@ -1,4 +1,5 @@
-﻿import React from "react";
+﻿import React, {useEffect, useState} from "react";
+import {publicationArticlesTypes} from "../../api/articleApi";
 
 function ArticleFilters(props) {
     const {
@@ -47,6 +48,29 @@ function ArticleFilters(props) {
         onReset,
         onApply,
     } = props;
+
+    const [publicationTypes, setPublicationTypes] = useState([]);
+    const [pubTypesLoading, setPubTypesLoading] = useState(false);
+    const [pubTypesError, setPubTypesError] = useState(null);
+
+    useEffect(() => {
+        const loadPublicationTypes = async () => {
+            try {
+                setPubTypesLoading(true);
+                setPubTypesError(null);
+
+                const response = await publicationArticlesTypes();
+                setPublicationTypes(response.data.publications ?? []);
+            } catch (err) {
+                console.error("Ошибка загрузки типов публикаций", err);
+                setPubTypesError("Не удалось загрузить типы публикаций");
+            } finally {
+                setPubTypesLoading(false);
+            }
+        };
+
+        loadPublicationTypes();
+    }, []);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -135,20 +159,25 @@ function ArticleFilters(props) {
                     <span>Тип публикации</span>
                     <select
                         className="input-text input-text-sm"
-                        value={publicationType}
+                        value={publicationType || ""}
                         onChange={(e) =>
                             onChange("publicationType", e.target.value)
                         }
+                        disabled={pubTypesLoading}
                     >
                         <option value="">Не важно</option>
-                        <option value="статья в журнале - научная статья">
-                            Научная статья в журнале
-                        </option>
-                        <option value="статья в журнале">
-                            Статья в журнале (другое)
-                        </option>
-                        {/* сюда потом добавишь реальные типы */}
+
+                        {publicationTypes.map((pt) => (
+                            <option key={pt} value={pt}>
+                                {pt}
+                            </option>
+                        ))}
                     </select>
+                    {pubTypesError && (
+                        <small style={{ color: "red" }}>
+                            {pubTypesError}
+                        </small>
+                    )}
                 </label>
 
                 <label className="filter-label">

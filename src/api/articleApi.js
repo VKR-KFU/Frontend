@@ -7,3 +7,9 @@ export function searchArticles(requestBody) {
 export function getArticleById(id) {
     return apiClient.get(`/Article/${id}`).then((res) => res.data);
 }
+
+// filters api
+
+export function publicationArticlesTypes() {
+    return apiClient.get("/PublicationType")
+}
