@@ -1,5 +1,5 @@
-﻿import React, {useEffect, useState} from "react";
-import {publicationArticlesTypes} from "../../api/articleApi";
+﻿import React, { useEffect, useState } from "react";
+import { getFilters } from "../../api/articleApi";
 
 function ArticleFilters(props) {
     const {
@@ -49,27 +49,43 @@ function ArticleFilters(props) {
         onApply,
     } = props;
 
-    const [publicationTypes, setPublicationTypes] = useState([]);
-    const [pubTypesLoading, setPubTypesLoading] = useState(false);
-    const [pubTypesError, setPubTypesError] = useState(null);
+    const [options, setOptions] = useState({
+        publicationTypes: [],
+        languages: [],
+        oecdCodes: [],
+        asjcCodes: [],
+        vakCodes: [],
+        years: [],
+    });
+    const [filtersLoading, setFiltersLoading] = useState(false);
+    const [filtersError, setFiltersError] = useState(null);
 
     useEffect(() => {
-        const loadPublicationTypes = async () => {
+        const loadFilters = async () => {
             try {
-                setPubTypesLoading(true);
-                setPubTypesError(null);
+                setFiltersLoading(true);
+                setFiltersError(null);
 
-                const response = await publicationArticlesTypes();
-                setPublicationTypes(response.data.publications ?? []);
+                const response = await getFilters();
+                const data = response.data ?? {};
+
+                setOptions({
+                    publicationTypes: data.publications ?? [],
+                    languages: data.languages ?? [],
+                    oecdCodes: data.oecdCodes ?? [],
+                    asjcCodes: data.asjcCodes ?? [],
+                    vakCodes: data.vakCodes ?? [],
+                    years: data.years ?? [],
+                });
             } catch (err) {
-                console.error("Ошибка загрузки типов публикаций", err);
-                setPubTypesError("Не удалось загрузить типы публикаций");
+                console.error("Ошибка загрузки фильтров", err);
+                setFiltersError("Не удалось загрузить справочники фильтров");
             } finally {
-                setPubTypesLoading(false);
+                setFiltersLoading(false);
             }
         };
 
-        loadPublicationTypes();
+        loadFilters();
     }, []);
 
     const handleSubmit = (e) => {
@@ -134,12 +150,19 @@ function ArticleFilters(props) {
 
                 <label className="filter-label">
                     <span>Год</span>
-                    <input
-                        type="number"
+                    <select
                         className="input-text input-text-sm"
-                        value={year}
+                        value={year || ""}
                         onChange={(e) => onChange("year", e.target.value)}
-                    />
+                        disabled={filtersLoading}
+                    >
+                        <option value="">Любой год</option>
+                        {options.years.map((y) => (
+                            <option key={y} value={y}>
+                                {y}
+                            </option>
+                        ))}
+                    </select>
                 </label>
 
                 <label className="filter-label">
@@ -163,21 +186,15 @@ function ArticleFilters(props) {
                         onChange={(e) =>
                             onChange("publicationType", e.target.value)
                         }
-                        disabled={pubTypesLoading}
+                        disabled={filtersLoading}
                     >
                         <option value="">Не важно</option>
-
-                        {publicationTypes.map((pt) => (
+                        {options.publicationTypes.map((pt) => (
                             <option key={pt} value={pt}>
                                 {pt}
                             </option>
                         ))}
                     </select>
-                    {pubTypesError && (
-                        <small style={{ color: "red" }}>
-                            {pubTypesError}
-                        </small>
-                    )}
                 </label>
 
                 <label className="filter-label">
@@ -195,18 +212,24 @@ function ArticleFilters(props) {
                     <span>Язык</span>
                     <select
                         className="input-text input-text-sm"
-                        value={language}
+                        value={language || ""}
                         onChange={(e) =>
                             onChange("language", e.target.value)
                         }
+                        disabled={filtersLoading}
                     >
                         <option value="">Не важно</option>
-                        <option value="русский">Русский</option>
-                        <option value="английский">Английский</option>
-                        <option value="киргизский">Киргизский</option>
-                        {/* добавь при необходимости другие */}
+                        {options.languages.map((lang) => (
+                            <option key={lang} value={lang}>
+                                {lang}
+                            </option>
+                        ))}
                     </select>
                 </label>
+
+                {filtersError && (
+                    <small style={{ color: "red" }}>{filtersError}</small>
+                )}
             </section>
 
             {/* 3. Аннотации и ключевые слова */}
@@ -264,14 +287,18 @@ function ArticleFilters(props) {
                     <input
                         className="input-text input-text-sm"
                         placeholder="ОКУТУУ ПРОЦЕССИ, ПРЕДМЕТТЕР АРАЛЫК..."
-                        value={keywordsText}
+                        value={
+                            Array.isArray(keywordsText)
+                                ? keywordsText.join(", ")
+                                : (keywordsText || "")
+                        }
                         onChange={(e) =>
                             onChange(
                                 "keywordsText",
                                 e.target.value
-                                    .split(",")              // режем по запятым
-                                    .map((s) => s.trim())    // убираем пробелы
-                                    .filter(Boolean)         // убираем пустые элементы
+                                    .split(",")
+                                    .map((s) => s.trim())
+                                    .filter(Boolean)
                             )
                         }
                     />
@@ -304,36 +331,59 @@ function ArticleFilters(props) {
 
                 <label className="filter-label">
                     <span>OECD code</span>
-                    <input
+                    <select
                         className="input-text input-text-sm"
-                        placeholder="Educational sciences"
-                        value={oecdCodeName}
+                        value={oecdCodeName || ""}
                         onChange={(e) =>
                             onChange("oecdCodeName", e.target.value)
                         }
-                    />
+                        disabled={filtersLoading}
+                    >
+                        <option value="">Не важно</option>
+                        {options.oecdCodes.map((code) => (
+                            <option key={code} value={code}>
+                                {code}
+                            </option>
+                        ))}
+                    </select>
                 </label>
 
                 <label className="filter-label">
                     <span>ASJC code</span>
-                    <input
+                    <select
                         className="input-text input-text-sm"
-                        value={asjcCodeName}
+                        value={asjcCodeName || ""}
                         onChange={(e) =>
                             onChange("asjcCodeName", e.target.value)
                         }
-                    />
+                        disabled={filtersLoading}
+                    >
+                        <option value="">Не важно</option>
+                        {options.asjcCodes.map((code) => (
+                            <option key={code} value={code}>
+                                {code}
+                            </option>
+                        ))}
+                    </select>
                 </label>
 
                 <label className="filter-label">
                     <span>ВАК</span>
-                    <input
+                    <select
                         className="input-text input-text-sm"
-                        value={vakCodeName}
+                        value={vakCodeName || ""}
                         onChange={(e) =>
                             onChange("vakCodeName", e.target.value)
                         }
-                    />
+                        disabled={filtersLoading}
+                    >
+                        <option value="">Не важно</option>
+                        {options.vakCodes.map((code) => (
+                            <option key={code} value={code}>
+                                {code}
+                            </option>
+                        ))}
+                    </select>
                 </label>
 
                 <label className="filter-label">

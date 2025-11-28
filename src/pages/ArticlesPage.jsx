@@ -24,6 +24,9 @@ const INITIAL_FILTERS = {
     language: "",
     edn: "",
 
+    // Доп инф.
+    hasFull: false,
+
     // Аннотации и ключевые слова
     abstractRuText: "",
     abstractEnText: "",
@@ -174,7 +177,7 @@ function ArticlesPage() {
     };
 
     const handleOpenProvider = (articleId, providerId, provider) => {
-        navigate(`/article/${articleId}`)
+        navigate(`/article/${providerId}`)
         console.log("open provider details", articleId, providerId, provider);
     };
 

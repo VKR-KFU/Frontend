@@ -10,6 +10,6 @@ export function getArticleById(id) {
 
 // filters api
 
-export function publicationArticlesTypes() {
-    return apiClient.get("/PublicationType")
+export function getFilters() {
+    return apiClient.get("/Filter")
 }

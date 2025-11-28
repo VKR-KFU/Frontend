@@ -9,18 +9,13 @@ function ArticleCard({ article, onOpenProvider }) {
         articleDetails,
         providers = [],
         hasPdf, // твой bool с бэка
+        hasFull,
     } = article;
 
     const [isOpen, setIsOpen] = useState(false);
 
     const hasAuthors =
         Array.isArray(authors) && authors.length > 0;
-
-    const hasTags = !!(
-        articleDetails?.source ||
-        articleDetails?.publicationType ||
-        articleDetails?.language
-    );
 
     const firstAuthor = authors?.[0];
     const otherAuthorsCount = Math.max(0, (authors?.length ?? 0) - 1);
@@ -36,6 +31,8 @@ function ArticleCard({ article, onOpenProvider }) {
         }
     };
 
+    const isFull = !!hasFull;
+
     return (
         <article className="article-card" onClick={handleCardClick}>
             <div className="article-card__header">
@@ -47,6 +44,13 @@ function ArticleCard({ article, onOpenProvider }) {
                             {year}
                         </span>
                     )}
+                    <span className="article-card__year">
+                        {
+                            isFull
+                                ? <span>Статья заполнена</span>
+                                : <span style={{color: 'red'}}>Статья не заполнена</span>
+                        }
+                    </span>
 
                     <span
                         className={
