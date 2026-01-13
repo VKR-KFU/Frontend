@@ -6,6 +6,8 @@ import ArticleDetailsPage from "./pages/ArticleDetailsPage";
 import ArticleToastContainer from "./components/common/ArticleToastContainer";
 import {useCallback, useEffect, useState} from "react";
 import {getSignalRConnection} from "./signalrConnection";
+import AuthorProfilePage from "./pages/AuthorProfilePage";
+import AuthorsPage from "./pages/AuthorsPage";
 
 function AppInner() {
   const [toasts, setToasts] = useState([]);
@@ -69,6 +71,8 @@ function AppInner() {
           <Routes>
             <Route path="/" element={<ArticlesPage />} />
             <Route path="/article/:id" element={<ArticleDetailsPage />} />
+            <Route path="/author/:id"  element={<AuthorProfilePage />} />
+            <Route path={"/authors"} element={<AuthorsPage />} />
           </Routes>
         </AppLayout>
 
