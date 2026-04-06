@@ -12,8 +12,14 @@ import {
     Users,
     X,
 } from "lucide-react";
-import { useParams } from "react-router-dom";
-import { getAuthor, getAuthorPublications } from '../api/authorApi';
+import {useLocation, useNavigate, useParams} from "react-router-dom";
+import { getAuthor, getAuthorPublications } from "../api/authorApi";
+import {sendVerifyClaimAuthor} from "../api/authorVerify";
+
+async function submitClaim(authorId, payload) {
+    await sendVerifyClaimAuthor(payload);
+    return { ok: true };
+}
 
 function initials(name) {
     const parts = (name || "").split(" ").filter(Boolean);
@@ -31,13 +37,13 @@ function formatAuthors(authors, limit = 3) {
 }
 
 function mapPublication(p) {
-    const citations =
-        (p.citationsRinc || 0) + (p.citationsCoreRinc || 0);
+    const citations = (p.citationsRinc || 0) + (p.citationsCoreRinc || 0);
 
     return {
         id: p.articleProviderId || p.id,
         year: p.year ?? null,
         title: p.title || "",
+        articleProviderId: p.articleProviderId || "",
         venue: p.sourceName || "Источник",
         type: p.publicationType || "Публикация",
         citations,
@@ -53,8 +59,14 @@ function mapPublication(p) {
 
 export default function AuthorProfilePage() {
     const { id } = useParams(); // GUID автора
+    const navigate = useNavigate();
+    const routerLocation = useLocation();
 
     const [tab, setTab] = useState("pubs");
+
+    // --- Modal: open/close with animation ---
+    // claimMounted = модалка в DOM, claimOpen = фаза "показать" (для transition)
+    const [claimMounted, setClaimMounted] = useState(false);
     const [claimOpen, setClaimOpen] = useState(false);
 
     const [author, setAuthor] = useState(null);
@@ -72,6 +84,126 @@ export default function AuthorProfilePage() {
 
     const [page, setPage] = useState(1);
     const pageSize = 20;
+
+    // --- Claim form state ---
+    const [claim, setClaim] = useState({
+        ContactEmail: "",
+        ContactPhone: "",
+        EvidenceLink: "",
+        Comment: "",
+    });
+    const [claimErrors, setClaimErrors] = useState({});
+    const [claimSubmitting, setClaimSubmitting] = useState(false);
+    const [claimSuccess, setClaimSuccess] = useState(false);
+
+    const setClaimField = (key) => (e) => {
+        setClaimSuccess(false);
+        setClaimErrors((prev) => ({ ...prev, [key]: "" }));
+        setClaim((prev) => ({ ...prev, [key]: e.target.value }));
+    };
+
+    const validateClaim = () => {
+        const errs = {};
+        const email = claim.ContactEmail.trim();
+        const phone = claim.ContactPhone.trim();
+        const link = claim.EvidenceLink.trim();
+
+        // хотя бы один контакт
+        if (!email && !phone) {
+            errs.ContactEmail = "Укажите email или телефон для связи";
+            errs.ContactPhone = "Укажите email или телефон для связи";
+        }
+
+        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+            errs.ContactEmail = "Похоже, email указан некорректно";
+        }
+
+        if (link) {
+            try {
+                new URL(link);
+            } catch {
+                errs.EvidenceLink = "Ссылка должна быть корректным URL (например https://...)";
+            }
+        }
+
+        setClaimErrors(errs);
+        return Object.keys(errs).length === 0;
+    };
+
+    const resetClaimForm = () => {
+        setClaim({
+            ContactEmail: "",
+            ContactPhone: "",
+            EvidenceLink: "",
+            Comment: "",
+        });
+        setClaimErrors({});
+        setClaimSubmitting(false);
+        setClaimSuccess(false);
+    };
+
+    const openClaim = () => {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+            navigate("/login", { state: { from: routerLocation.pathname } });
+            return;
+        }
+
+        setClaimMounted(true);
+        requestAnimationFrame(() => setClaimOpen(true));
+    };
+
+    const closeClaim = () => {
+        setClaimOpen(false);
+        // duration должен совпадать с duration-xxx на модалке/оверлее
+        window.setTimeout(() => {
+            setClaimMounted(false);
+            resetClaimForm();
+        }, 220);
+    };
+
+    const onSubmitClaim = async () => {
+        if (!id) return;
+        if (!validateClaim()) return;
+
+        setClaimSubmitting(true);
+        setError("");
+
+        try {
+            const payload = {
+                ContactEmail: claim.ContactEmail.trim(),
+                ContactPhone: claim.ContactPhone.trim(),
+                EvidenceLink: claim.EvidenceLink.trim(),
+                Comment: claim.Comment.trim(),
+                AuthorId: id
+            };
+
+            const res = await submitClaim(id, payload);
+
+            if (res?.ok === false) {
+                throw new Error(res?.message || "Не удалось отправить заявку");
+            }
+
+            setClaimSuccess(true);
+        } catch (e) {
+            setError(e?.message || "Не удалось отправить заявку");
+        } finally {
+            setClaimSubmitting(false);
+        }
+    };
+
+    // ESC to close modal (плавно)
+    useEffect(() => {
+        if (!claimMounted) return;
+
+        const onKeyDown = (e) => {
+            if (e.key === "Escape") closeClaim();
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [claimMounted]);
 
     useEffect(() => {
         if (!id) return;
@@ -139,7 +271,8 @@ export default function AuthorProfilePage() {
     const sorted = useMemo(() => {
         // если бэк уже сортирует — можешь убрать
         return [...pubs].sort(
-            (a, b) => (b.year || 0) - (a.year || 0) || (b.citations || 0) - (a.citations || 0)
+            (a, b) =>
+                (b.year || 0) - (a.year || 0) || (b.citations || 0) - (a.citations || 0)
         );
     }, [pubs]);
 
@@ -154,23 +287,40 @@ export default function AuthorProfilePage() {
     }, [author, total]);
 
     const topCoauthors = useMemo(() => {
+        // 1) если пришли с бэка — используем их
         if (author?.topCoauthors?.length) {
-            return author.topCoauthors.map((name) => ({ name }));
+            return author.topCoauthors.map((c) => ({
+                id: c.id,
+                fullName: c.fullName,
+            }));
         }
-        // fallback: считаем по pubs
+
+        // 2) fallback по pubs (id нет — ставим null)
         const counts = new Map();
-        for (const p of pubs) {
+        for (const p of pubs || []) {
             for (const a of p.authors || []) {
-                if (!a) continue;
-                if (author?.fullName && a.includes(author.fullName)) continue;
-                counts.set(a, (counts.get(a) || 0) + 1);
+                if (!a?.fullName) continue;
+
+                // исключаем самого автора
+                if (author?.id && a.id === author.id) continue;
+                if (!author?.id && author?.fullName && a.fullName === author.fullName) continue;
+
+                const key = a.id || a.fullName; // если id нет — ключом имя
+                const prev = counts.get(key) || { id: a.id ?? null, fullName: a.fullName, n: 0 };
+                prev.n += 1;
+                counts.set(key, prev);
             }
         }
-        return [...counts.entries()]
-            .sort((a, b) => b[1] - a[1])
+
+        return [...counts.values()]
+            .sort((x, y) => y.n - x.n)
             .slice(0, 8)
-            .map(([name]) => ({ name }));
+            .map(({ id, fullName }) => ({ id, fullName }));
     }, [author, pubs]);
+
+    function handleClickArticleTitle(articleProviderId) {
+        navigate(`/article/${articleProviderId}`);
+    }
 
     const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize));
 
@@ -201,7 +351,7 @@ export default function AuthorProfilePage() {
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">
-                                                    {loadingAuthor ? "Загрузка..." : (author?.fullName || "Автор не найден")}
+                                                    {loadingAuthor ? "Загрузка..." : author?.fullName || "Автор не найден"}
                                                 </h1>
 
                                                 {(author?.department || author?.organization) && (
@@ -238,12 +388,20 @@ export default function AuthorProfilePage() {
                                             <button className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-200">
                                                 Подписаться
                                             </button>
-                                            <button
-                                                onClick={() => setClaimOpen(true)}
-                                                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                                            >
-                                                Это вы?
-                                            </button>
+
+                                            {author?.isVerified ? (
+                                                <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">
+                                                    <ShieldCheck className="h-4 w-4" />
+                                                    Автор подтверждён
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={openClaim}
+                                                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                                >
+                                                    Это вы?
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -284,13 +442,16 @@ export default function AuthorProfilePage() {
                                 <div className="space-y-2">
                                     {topCoauthors.map((c) => (
                                         <div
-                                            key={c.name}
+                                            key={c.fullName}
                                             className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
                                         >
                                             <div className="min-w-0">
-                                                <div className="text-sm font-medium text-slate-900 truncate">{c.name}</div>
+                                                <div className="text-sm font-medium text-slate-900 truncate">{c.fullName}</div>
                                             </div>
-                                            <button className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50">
+                                            <button
+                                                onClick={() => navigate(`/author/${c.id}`)}
+                                                className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                                            >
                                                 Профиль
                                             </button>
                                         </div>
@@ -378,9 +539,7 @@ export default function AuthorProfilePage() {
                                 <div className="flex items-center justify-between text-sm text-slate-600">
                                     <div>
                                         Найдено:{" "}
-                                        <span className="text-slate-900 font-semibold">
-                      {loadingPubs ? "..." : total}
-                    </span>
+                                        <span className="text-slate-900 font-semibold">{loadingPubs ? "..." : total}</span>
                                     </div>
                                     <div className="hidden sm:block">Сортировка: год ↓, цитирования ↓</div>
                                 </div>
@@ -393,13 +552,15 @@ export default function AuthorProfilePage() {
                                     <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-8 text-center">
                                         <div className="mx-auto max-w-md space-y-2">
                                             <div className="text-lg font-semibold text-slate-900">Ничего не найдено</div>
-                                            <div className="text-sm text-slate-600">Попробуйте изменить запрос или фильтры.</div>
+                                            <div className="text-sm text-slate-600">
+                                                Попробуйте изменить запрос или фильтры.
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (
                                     <>
                                         {sorted.map((p) => (
-                                            <PublicationCard key={p.id} pub={p} />
+                                            <PublicationCard key={p.id} pub={p} handleClickArticle={handleClickArticleTitle} />
                                         ))}
 
                                         {/* Pagination */}
@@ -446,49 +607,143 @@ export default function AuthorProfilePage() {
                 </div>
             </div>
 
-            {/* Modal: Это вы? */}
-            {claimOpen && (
+            {/* Modal: Это вы? (с плавной анимацией) */}
+            {claimMounted && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40" onClick={() => setClaimOpen(false)} />
-                    <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl ring-1 ring-black/10">
+                    {/* overlay */}
+                    <div
+                        className={
+                            "absolute inset-0 bg-black/40 transition-opacity duration-200 " +
+                            (claimOpen ? "opacity-100" : "opacity-0")
+                        }
+                        onClick={closeClaim}
+                    />
+
+                    {/* dialog */}
+                    <div
+                        className={
+                            "relative w-full max-w-lg rounded-2xl bg-white shadow-xl ring-1 ring-black/10 " +
+                            "transform transition-all duration-200 " +
+                            (claimOpen
+                                ? "opacity-100 translate-y-0 scale-100"
+                                : "opacity-0 translate-y-2 scale-[0.98]")
+                        }
+                    >
                         <div className="flex items-start justify-between p-5">
                             <div>
                                 <div className="text-lg font-semibold text-slate-900">Подтверждение профиля</div>
                                 <div className="mt-1 text-sm text-slate-600">
-                                    Мы можем привязать профиль к аккаунту. Обычно нужна почта организации или ссылка на ORCID/Google Scholar.
+                                    Оставьте контакты и (желательно) ссылку-доказательство: ORCID / Google Scholar / сайт организации.
                                 </div>
                             </div>
-                            <button className="rounded-xl p-2 hover:bg-slate-100" onClick={() => setClaimOpen(false)} aria-label="Закрыть">
+                            <button
+                                className="rounded-xl p-2 hover:bg-slate-100"
+                                onClick={closeClaim}
+                                aria-label="Закрыть"
+                            >
                                 <X className="h-5 w-5 text-slate-700" />
                             </button>
                         </div>
 
                         <div className="px-5 pb-5 space-y-3">
-                            <div className="rounded-xl border border-slate-200 p-3">
-                                <div className="text-sm font-semibold text-slate-900">Быстрый вариант</div>
-                                <div className="text-sm text-slate-600">Войти через корпоративную почту (если доступно).</div>
-                            </div>
+                            {claimSuccess && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                                    Заявка отправлена. Мы свяжемся с вами по указанным контактам.
+                                </div>
+                            )}
 
-                            <div className="rounded-xl border border-slate-200 p-3">
-                                <div className="text-sm font-semibold text-slate-900">Альтернатива</div>
-                                <div className="text-sm text-slate-600">Отправить ссылку на профиль ORCID / Google Scholar.</div>
-                            </div>
+                            <Field
+                                label="ContactEmail"
+                                placeholder="ivanov@university.ru"
+                                value={claim.ContactEmail}
+                                onChange={setClaimField("ContactEmail")}
+                                error={claimErrors.ContactEmail}
+                            />
+                            <Field
+                                label="ContactPhone"
+                                placeholder="+7 999 123-45-67"
+                                value={claim.ContactPhone}
+                                onChange={setClaimField("ContactPhone")}
+                                error={claimErrors.ContactPhone}
+                            />
+                            <Field
+                                label="EvidenceLink"
+                                placeholder="https://orcid.org/0000-0000-0000-0000"
+                                value={claim.EvidenceLink}
+                                onChange={setClaimField("EvidenceLink")}
+                                error={claimErrors.EvidenceLink}
+                            />
+                            <FieldArea
+                                label="Comment"
+                                placeholder="Любая дополнительная информация…"
+                                value={claim.Comment}
+                                onChange={setClaimField("Comment")}
+                                error={claimErrors.Comment}
+                            />
 
                             <div className="flex justify-end gap-2 pt-2">
                                 <button
                                     className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-                                    onClick={() => setClaimOpen(false)}
+                                    onClick={closeClaim}
+                                    disabled={claimSubmitting}
                                 >
                                     Отмена
                                 </button>
-                                <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-                                    Начать подтверждение
+                                <button
+                                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                                    onClick={onSubmitClaim}
+                                    disabled={claimSubmitting}
+                                >
+                                    {claimSubmitting ? "Отправка…" : "Начать подтверждение"}
                                 </button>
                             </div>
+
+                            {error && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                    {error}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function Field({ label, value, onChange, placeholder, error }) {
+    return (
+        <div>
+            <div className="text-xs font-semibold text-slate-700">{label}</div>
+            <input
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                className={
+                    "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 " +
+                    (error ? "border-red-300 focus:ring-red-200" : "border-slate-200 focus:ring-slate-300")
+                }
+            />
+            {error ? <div className="mt-1 text-xs text-red-700">{error}</div> : null}
+        </div>
+    );
+}
+
+function FieldArea({ label, value, onChange, placeholder, error }) {
+    return (
+        <div>
+            <div className="text-xs font-semibold text-slate-700">{label}</div>
+            <textarea
+                rows={4}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                className={
+                    "mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 " +
+                    (error ? "border-red-300 focus:ring-red-200" : "border-slate-200 focus:ring-slate-300")
+                }
+            />
+            {error ? <div className="mt-1 text-xs text-red-700">{error}</div> : null}
         </div>
     );
 }
@@ -531,9 +786,7 @@ function TabButton({ active, children, onClick }) {
             onClick={onClick}
             className={
                 "rounded-2xl px-4 py-2 text-sm font-semibold " +
-                (active
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-800 ring-1 ring-black/5 hover:bg-slate-50")
+                (active ? "bg-slate-900 text-white" : "bg-white text-slate-800 ring-1 ring-black/5 hover:bg-slate-50")
             }
         >
             {children}
@@ -541,7 +794,7 @@ function TabButton({ active, children, onClick }) {
     );
 }
 
-function PublicationCard({ pub }) {
+function PublicationCard({ pub, handleClickArticle }) {
     return (
         <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
             <div className="p-5 space-y-3">
@@ -556,7 +809,12 @@ function PublicationCard({ pub }) {
                             {pub.downloads ? <Pill outline>Загрузки: {pub.downloads}</Pill> : null}
                         </div>
 
-                        <h3 className="text-base sm:text-lg font-semibold leading-snug text-slate-900">{pub.title}</h3>
+                        <h3
+                            onClick={() => handleClickArticle(pub.articleProviderId)}
+                            className="text-base sm:text-lg font-semibold leading-snug text-slate-900 cursor-pointer"
+                        >
+                            {pub.title}
+                        </h3>
 
                         <div className="text-sm text-slate-600">
                             <span className="font-medium text-slate-900">{pub.venue}</span>
@@ -571,9 +829,9 @@ function PublicationCard({ pub }) {
                                 href={pub.sourceUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
                             >
-                                <ExternalLink className="inline-block h-4 w-4 mr-2" />
+                                <ExternalLink className="h-4 w-4" />
                                 Страница
                             </a>
                         )}
@@ -582,9 +840,9 @@ function PublicationCard({ pub }) {
                                 href={pub.pdfUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
                             >
-                                <Download className="inline-block h-4 w-4 mr-2" />
+                                <Download className="h-4 w-4" />
                                 PDF
                             </a>
                         )}
@@ -614,9 +872,7 @@ function Pill({ children, outline }) {
         <span
             className={
                 "rounded-full px-3 py-1 text-xs font-medium " +
-                (outline
-                    ? "border border-slate-200 bg-white text-slate-700"
-                    : "bg-slate-100 text-slate-700")
+                (outline ? "border border-slate-200 bg-white text-slate-700" : "bg-slate-100 text-slate-700")
             }
         >
       {children}

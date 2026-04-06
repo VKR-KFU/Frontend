@@ -1,87 +1,116 @@
-﻿import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { getArticleById } from "../api/articleApi";
-import "./ArticleDetailsPage.css";
+﻿import React, { useEffect, useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {getArticleById, pdfDownloaded} from "../api/articleApi";
 
-// добавь это (если путь другой — поправь)
 import * as signalR from "@microsoft/signalr";
-import {getSignalRConnection} from "../signalrConnection";
+import { getSignalRConnection } from "../signalrConnection";
 
-function ArticleDetailsPage() {
+import {
+    ArrowLeft,
+    Bell,
+    BellOff,
+    FileText,
+    Globe,
+    GraduationCap,
+    Link as LinkIcon,
+    ShieldCheck,
+    Star,
+    Download,
+} from "lucide-react";
+import {getArticleDetailStatistic} from "../api/articleStatisticApi";
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    Tooltip,
+    CartesianGrid,
+    LabelList,
+} from "recharts";
+
+export default function ArticleDetailsPage() {
     const { id } = useParams();
+    const navigate = useNavigate();
 
     const [article, setArticle] = useState(null);
+    const [statistic, setStatistic] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [annotationTab, setAnnotationTab] = useState(null);
+
     const [annotationIndex, setAnnotationIndex] = useState(0);
 
-    // состояние кнопки уведомлений
+    // уведомления
     const [notifySubscribed, setNotifySubscribed] = useState(false);
     const [notifyLoading, setNotifyLoading] = useState(false);
 
-    // 1. загрузка статьи
+    // 1) загрузка статьи
     useEffect(() => {
         if (!id) return;
-
         let cancelled = false;
 
-        const load = async () => {
+        async function load() {
             setLoading(true);
             setError(null);
             try {
                 const data = await getArticleById(id);
+                const statistic = await getArticleDetailStatistic(id);
                 if (cancelled) return;
-
                 setArticle(data || null);
+                setStatistic(statistic || null);
             } catch (e) {
                 if (cancelled) return;
                 setError(e.message || "Ошибка при загрузке статьи");
             } finally {
                 if (!cancelled) setLoading(false);
             }
-        };
+        }
 
         load();
-
         return () => {
             cancelled = true;
         };
     }, [id]);
 
-    // 2. провайдер и аннотации — считаем КАЖДЫЙ рендер
+    // 2) вычисления
     const provider = article?.provider ?? {};
-    const annotations = Array.isArray(provider.annotations)
-        ? provider.annotations
-        : [];
+    const providerId = provider?.id;
 
-    // 3. эффект для выбора активной вкладки аннотации
+    const pdfDownloadsCount = statistic?.pdfDownloadsCount ?? 0;
+    const viewsCount = statistic?.viewsCount ?? 0;
+    const authors = Array.isArray(article?.authors) ? article.authors : [];
+    const annotations = Array.isArray(provider?.annotations) ? provider.annotations : [];
+    const keywords = Array.isArray(provider?.keywords) ? provider.keywords : [];
+    const url = provider?.pdfUrl?.replace(
+        "http://minio:9000",
+        "http://localhost:3001/minio"
+    );
+
+    const conversion = useMemo(() => {
+        if (!viewsCount) return 0;
+        return (pdfDownloadsCount / viewsCount) * 100;
+    }, [pdfDownloadsCount, viewsCount]);
+
+    const conversionRounded = useMemo(() => Math.round(conversion * 10) / 10, [conversion]);
+    const conversionBar = useMemo(() => Math.min(100, Math.max(0, conversion)), [conversion]);
+
+    const isFull = !!provider?.hasFull;
+
     useEffect(() => {
-        if (!annotations.length) {
-            setAnnotationIndex(0);
-            return;
-        }
         setAnnotationIndex(0);
     }, [article?.id, annotations.length]);
 
     const activeAnnotation = annotations[annotationIndex] || null;
 
-    // 4. подписка на событие NotifyArticleUpdated (SignalR)
     useEffect(() => {
         const connection = getSignalRConnection();
 
         const handler = (payload) => {
-            // payload.ArticleProviderId с сервера
-            if (!provider.id || payload.articleProviderId !== provider.id) {
-                return;
-            }
+            if (!providerId || payload?.articleProviderId !== providerId) return;
 
-            // получили нотификацию — перезагружаем статью
             getArticleById(id)
                 .then((data) => setArticle(data || null))
-                .catch((e) =>
-                    console.error("Ошибка при обновлении статьи:", e)
-                );
+                .catch((e) => console.error("Ошибка при обновлении статьи:", e));
         };
 
         connection.on("NotifyArticleUpdated", handler);
@@ -89,38 +118,11 @@ function ArticleDetailsPage() {
         return () => {
             connection.off("NotifyArticleUpdated", handler);
         };
-    }, [id, provider.id]);
+    }, [id, providerId]);
 
-    // 5. ранние выходы
-    if (loading) {
-        return (
-            <div className="article-details">
-                <div className="info-block">Загрузка…</div>
-            </div>
-        );
+    const handleClick = () => {
+        pdfDownloaded(id).catch(() => {});
     }
-
-    if (error) {
-        return (
-            <div className="article-details">
-                <div className="info-block error">{error}</div>
-            </div>
-        );
-    }
-
-    if (!article) {
-        return null;
-    }
-
-    // 6. обычные вычисления после ранних return'ов
-    const authors = article.authors || [];
-    const isFull = !!provider.hasFull;
-
-    const keywordsText = Array.isArray(provider.keywords)
-        ? provider.keywords
-        : [];
-
-    const providerId = provider.id;
 
     const handleNotifyClick = async () => {
         if (!providerId) return;
@@ -132,8 +134,6 @@ function ArticleDetailsPage() {
 
             if (connection.state === signalR.HubConnectionState.Disconnected) {
                 await connection.start();
-                // eslint-disable-next-line no-console
-                console.log("SignalR connected, id:", connection.connectionId);
             }
 
             if (!notifySubscribed) {
@@ -150,339 +150,480 @@ function ArticleDetailsPage() {
         }
     };
 
-    return (
-        <div className="article-details">
-            <header className="article-details__header">
-                <button
-                    type="button"
-                    className="article-details__back"
-                    onClick={() => window.history.back()}
-                >
-                    ← К списку статей
-                </button>
-
-                <div className="article-details__title-row">
-                    <div className="article-details__title-block">
-                        <h1 className="article-details__title">
-                            {article.title}
-                        </h1>
-                        <div className="article-details__authors-line">
-                            {authors.length > 0 ? (
-                                authors.map((a) => a.fullName).join(", ")
-                            ) : (
-                                <span className="article-details__author-missing">
-                                    Автор не указан
-                                </span>
-                            )}
-                        </div>
-
-                        {isFull ? (
-                            <div className="article-details__notify article-details__notify--done">
-                                Эта статья уже заполнена
-                            </div>
-                        ) : (
-                            <button
-                                type="button"
-                                className={
-                                    "notify-btn" +
-                                    (notifySubscribed
-                                        ? " notify-btn--active"
-                                        : "") +
-                                    (notifyLoading
-                                        ? " notify-btn--loading"
-                                        : "")
-                                }
-                                onClick={handleNotifyClick}
-                                disabled={notifyLoading}
-                            >
-                                {notifyLoading
-                                    ? "Подключаем уведомления…"
-                                    : notifySubscribed
-                                        ? "Уведомления включены"
-                                        : "Уведомить, когда статья будет заполнена"}
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="article-details__chips">
-                        {(provider.year ?? article.year) && (
-                            <span className="chip chip--year">
-                                {provider.year ?? article.year}
-                            </span>
-                        )}
-                        {provider.language && (
-                            <span className="chip chip--lang">
-                                {provider.language.toUpperCase()}
-                            </span>
-                        )}
-                        {provider.source && (
-                            <span className="chip chip--source">
-                                {provider.source}
-                            </span>
-                        )}
-                        <button
-                            type="button"
-                            className={
-                                provider.pdfUrl
-                                    ? "chip chip--pdf chip--pdf-ok"
-                                    : "chip chip--pdf chip--pdf-missing"
-                            }
-                        >
-                            {provider.pdfUrl
-                                ? "PDF доступен"
-                                : "PDF не доступен"}
-                        </button>
+    // ---- UI states ----
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50">
+                <div className="mx-auto max-w-6xl px-4 py-10">
+                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-8 text-center text-slate-600">
+                        Загрузка…
                     </div>
                 </div>
-            </header>
+            </div>
+        );
+    }
 
-            <main className="article-details__body">
-                {/* левая колонка */}
-                <section className="article-details__col article-details__col--left">
-                    <div className="card">
-                        <h2 className="card__title">Авторы и организации</h2>
-                        {authors.length === 0 && (
-                            <p className="muted">Автор не указан.</p>
-                        )}
-                        {authors.length > 0 && (
-                            <ul className="authors-list">
-                                {authors.map((a, idx) => (
-                                    <li
-                                        key={idx}
-                                        className="authors-list__item"
-                                    >
-                                        <div className="authors-list__name">
-                                            {a.fullName}
-                                        </div>
-                                        <div className="authors-list__meta">
-                                            {a.department && (
-                                                <span>{a.department}</span>
-                                            )}
-                                            {a.organization && (
-                                                <>
-                                                    {a.department && " • "}
-                                                    <span>
-                                                    {a.organization}
-                                                </span>
-                                                </>
-                                            )}
-                                            {a.spinCode && (
-                                                <> • SPIN: {a.spinCode}</>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        {provider.universityName && (
-                            <p className="article-details__university">
-                                Базовый вуз:{" "}
-                                <strong>{provider.universityName}</strong>
-                            </p>
-                        )}
+    if (error) {
+        return (
+            <div className="min-h-screen bg-slate-50">
+                <div className="mx-auto max-w-6xl px-4 py-10">
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
+                        {error}
                     </div>
+                </div>
+            </div>
+        );
+    }
 
-                    <div className="card">
-                        <div className="card__header-row">
-                            <h2 className="card__title">Аннотация</h2>
+    if (!article) return null;
 
-                            {annotations.length > 0 && (
-                                <div className="tabs">
+    const displayYear = provider?.year ?? article?.year ?? null;
+
+    return (
+        <div className="min-h-screen bg-slate-50">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-700">
+                <div className="mx-auto max-w-6xl px-4 py-10">
+                    <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/15 hover:bg-white/15"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        К списку статей
+                    </button>
+
+                    <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="text-white min-w-0">
+                            <div className="text-sm text-white/80">Статья</div>
+
+                            <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight leading-snug break-words">
+                                {article.title}
+                            </h1>
+
+                            <div className="mt-3 text-sm text-white/85">
+                                {authors.length > 0 ? (
+                                    <span className="break-words">
+                    {authors.map((a) => a.fullName).join(", ")}
+                  </span>
+                                ) : (
+                                    <span className="text-white/70">Автор не указан</span>
+                                )}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {displayYear && <ChipDark>{displayYear}</ChipDark>}
+                                {provider?.language && (
+                                    <ChipDark>
+                                        <Globe className="h-4 w-4" />
+                                        {String(provider.language).toUpperCase()}
+                                    </ChipDark>
+                                )}
+                                {provider?.source && <ChipDark>{provider.source}</ChipDark>}
+                                <ChipDark>
+                                    <FileText className="h-4 w-4" />
+                                    {provider?.pdfUrl ? "PDF доступен" : "PDF не доступен"}
+                                </ChipDark>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 lg:items-end">
+                            {isFull ? (
+                                <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-50 ring-1 ring-emerald-200/20">
+                                    <ShieldCheck className="h-4 w-4" />
+                                    Эта статья уже заполнена
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleNotifyClick}
+                                    disabled={notifyLoading}
+                                    className={
+                                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ring-1 transition " +
+                                        (notifySubscribed
+                                            ? "bg-white text-slate-900 ring-white/20 hover:bg-white/90"
+                                            : "bg-white/10 text-white ring-white/15 hover:bg-white/15") +
+                                        (notifyLoading ? " opacity-70" : "")
+                                    }
+                                >
+                                    {notifySubscribed ? (
+                                        <>
+                                            <BellOff className="h-4 w-4" />
+                                            Уведомления включены
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Bell className="h-4 w-4" />
+                                            Уведомить, когда статья будет заполнена
+                                        </>
+                                    )}
+                                </button>
+                            )}
+
+                            <div className="flex gap-2">
+                                <a
+                                    href={url || undefined}
+                                    onClick={() => { if (url) handleClick(); }}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={
+                                        "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ring-1 " +
+                                        (url
+                                            ? "bg-white/10 text-white ring-white/15 hover:bg-white/15"
+                                            : "bg-white/5 text-white/50 ring-white/10 cursor-not-allowed pointer-events-none")
+                                    }
+                                >
+                                    <Download className="h-4 w-4" />
+                                    PDF
+                                </a>
+
+                                <a
+                                    href={provider?.sourceUrl || undefined}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={
+                                        "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ring-1 " +
+                                        (provider?.sourceUrl
+                                            ? "bg-white/10 text-white ring-white/15 hover:bg-white/15"
+                                            : "bg-white/5 text-white/50 ring-white/10 cursor-not-allowed pointer-events-none")
+                                    }
+                                >
+                                    <LinkIcon className="h-4 w-4" />
+                                    Источник
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Main */}
+            <div className="mx-auto max-w-6xl px-4 py-10">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left */}
+                    <div className="lg:col-span-7 space-y-6">
+                        {/* Authors card */}
+                        <Card title="Авторы и организации">
+                            {authors.length === 0 ? (
+                                <div className="text-sm text-slate-600">Автор не указан.</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {authors.map((a, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="rounded-xl border border-slate-200 p-3"
+                                        >
+                                            <div className="text-sm font-medium text-slate-900">
+                                                {a.fullName}
+                                            </div>
+                                            <div className="mt-1 text-xs text-slate-600">
+                                                {a.department ? <span>{a.department}</span> : null}
+                                                {a.organization ? (
+                                                    <>
+                                                        {a.department ? <span> • </span> : null}
+                                                        <span>{a.organization}</span>
+                                                    </>
+                                                ) : null}
+                                                {a.spinCode ? <> • SPIN: {a.spinCode}</> : null}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {provider?.universityName ? (
+                                <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700">
+                                      <span className="inline-flex items-center gap-2">
+                                        <GraduationCap className="h-4 w-4" />
+                                        Базовый вуз:{" "}
+                                          <span className="font-semibold text-slate-900">
+                                          {provider.universityName}
+                                        </span>
+                                      </span>
+                                </div>
+                            ) : null}
+
+                            {provider?.journal ? (
+                                <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700">
+                                      <span className="inline-flex items-center gap-2">
+                                        <GraduationCap className="h-4 w-4" />
+                                        Журнал:{" "}
+                                          <span className="font-semibold text-slate-900">
+                                          {provider.journal}
+                                        </span>
+                                      </span>
+                                </div>
+                            ) : null}
+                        </Card>
+
+                        {/* Annotation card */}
+                        <Card title="Аннотация">
+                            {annotations.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 mb-4">
                                     {annotations.map((a, idx) => (
                                         <button
                                             key={idx}
                                             type="button"
-                                            className={
-                                                annotationIndex === idx
-                                                    ? "tabs__btn tabs__btn--active"
-                                                    : "tabs__btn"
-                                            }
                                             onClick={() => setAnnotationIndex(idx)}
+                                            className={
+                                                "rounded-2xl px-4 py-2 text-sm font-semibold transition " +
+                                                (annotationIndex === idx
+                                                    ? "bg-slate-900 text-white"
+                                                    : "bg-white text-slate-800 ring-1 ring-black/5 hover:bg-slate-50")
+                                            }
                                         >
-                                            {a.displayName
-                                                || a.languageCode?.toUpperCase()
-                                                || `Аннотация ${idx + 1}`}
+                                            {a.displayName ||
+                                                (a.languageCode ? String(a.languageCode).toUpperCase() : null) ||
+                                                `Аннотация ${idx + 1}`}
                                         </button>
                                     ))}
                                 </div>
+                            ) : null}
+
+                            {annotations.length === 0 ? (
+                                <div className="text-sm text-slate-600">Аннотация не указана.</div>
+                            ) : activeAnnotation ? (
+                                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                                    {activeAnnotation.text}
+                                </p>
+                            ) : null}
+                        </Card>
+
+                        {/* Keywords */}
+                        <Card title="Ключевые слова">
+                            {keywords.length ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {keywords.map((kw, idx) => (
+                                        <Pill key={idx} outline>
+                                            {kw}
+                                        </Pill>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-sm text-slate-600">Ключевые слова не указаны.</div>
                             )}
-                        </div>
-
-                        <div className="annotation">
-                            {annotations.length === 0 && (
-                                <p className="muted">Аннотация не указана.</p>
-                            )}
-
-                            {annotations.length > 0 && activeAnnotation && (
-                                <p>{activeAnnotation.text}</p>
-                            )}
-                        </div>
+                        </Card>
                     </div>
 
-                    <div className="card">
-                        <h2 className="card__title">Ключевые слова</h2>
-                        {keywordsText.length ? (
-                            <div className="keywords">
-                                {keywordsText.map((kw, idx) => (
-                                    <span
-                                        key={idx}
-                                        className="keyword-chip"
-                                    >
-                                        {kw}
+                    {/* Right */}
+                    <div className="lg:col-span-5 space-y-6">
+                        {/* Bibliography */}
+                        <Card title="Библиографические данные">
+                            <InfoRow label="Источник" value={provider?.source || "—"} />
+                            <InfoRow label="Тип публикации" value={provider?.publicationType || "—"} />
+                            <InfoRow label="Год" value={displayYear ?? "—"} />
+                            <InfoRow label="Университет" value={provider?.universityName || "—"} />
+                            <InfoRow label="ASJC" value={provider?.asjcCodeName || "—"} />
+                            <InfoRow label="OECD" value={provider?.oecdCodeName || "—"} />
+                            <InfoRow label="ВАК" value={provider?.vakCodeName || "—"} />
+                            <InfoRow label="EDN" value={provider?.edn || "—"} />
+                        </Card>
+
+                        {/* Metrics */}
+                        <Card title="Метрики">
+                            <div className="grid grid-cols-2 gap-3">
+                                <Metric label="Просмотры" value={statistic?.viewsCount ?? 0} />
+                                <Metric label="Скачивания" value={statistic?.pdfDownloadsCount ?? 0} />
+                                {/*<Metric*/}
+                                {/*    label="В коллекциях"*/}
+                                {/*    value={provider?.altmetric?.includedInCollections ?? 0}*/}
+                                {/*/>*/}
+                                {/*<Metric label="Отзывы" value={provider?.altmetric?.totalReviews ?? 0} />*/}
+                                {/*<div className="col-span-2">*/}
+                                {/*    <MetricWide*/}
+                                {/*        label="Общий балл"*/}
+                                {/*        value={provider?.altmetric?.allScore ?? 0}*/}
+                                {/*        Icon={Star}*/}
+                                {/*    />*/}
+                                {/*</div>*/}
+                            </div>
+
+                            <div className="mt-4 rounded-xl border border-slate-200 p-3">
+                                <div className="text-sm text-slate-700">
+                                    Цитирования (РИНЦ):{" "}
+                                    <span className="font-semibold text-slate-900">
+                                        {provider?.citirovanieInRinc ?? 0}
                                     </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="muted">
-                                Ключевые слова не указаны.
-                            </p>
-                        )}
-                    </div>
-                </section>
+                                </div>
+                                <div className="mt-1 text-sm text-slate-700">
+                                    Цитирования (ядро РИНЦ):{" "}
+                                     <span className="font-semibold text-slate-900">
+                                        {provider?.citirovanieInCoreRinc ?? 0}
+                                      </span>
+                                </div>
 
-                {/* правая колонка */}
-                <section className="article-details__col article-details__col--right">
-                    <div className="card">
-                        <h2 className="card__title">
-                            Библиографические данные
-                        </h2>
-                        <dl className="def-list">
-                            <div className="def-list__row">
-                                <dt>Источник</dt>
-                                <dd>{provider.source || "—"}</dd>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {provider?.isRinc ? <Pill>Входит в РИНЦ</Pill> : null}
+                                    {provider?.isCoreRinc ? <Pill>Ядро РИНЦ</Pill> : null}
+                                </div>
                             </div>
-                            <div className="def-list__row">
-                                <dt>Тип публикации</dt>
-                                <dd>{provider.publicationType || "—"}</dd>
-                            </div>
-                            <div className="def-list__row">
-                                <dt>Год</dt>
-                                <dd>
-                                    {provider.year ??
-                                        article.year ??
-                                        "—"}
-                                </dd>
-                            </div>
-                            <div className="def-list__row">
-                                <dt>Университет</dt>
-                                <dd>{provider.universityName || "—"}</dd>
-                            </div>
-                            <div className="def-list__row">
-                                <dt>ASJC</dt>
-                                <dd>{provider.asjcCodeName || "—"}</dd>
-                            </div>
-                            <div className="def-list__row">
-                                <dt>OECD</dt>
-                                <dd>{provider.oecdCodeName || "—"}</dd>
-                            </div>
-                            <div className="def-list__row">
-                                <dt>ВАК</dt>
-                                <dd>{provider.vakCodeName || "—"}</dd>
-                            </div>
-                        </dl>
-                    </div>
 
-                    <div className="card">
-                        <h2 className="card__title">Метрики</h2>
-                        <div className="metrics-grid">
-                            <div className="metric">
-                                <div className="metric__label">Просмотры</div>
-                                <div className="metric__value">
-                                    {provider.altmetric?.views ?? 0}
+                            <div className="mt-4">
+                                <div className="text-sm font-semibold text-slate-900 mb-2">
+                                    Просмотры и скачивания
                                 </div>
+                                <ViewsDownloadsBar views={viewsCount} downloads={pdfDownloadsCount} />
                             </div>
-                            <div className="metric">
-                                <div className="metric__label">Скачивания</div>
-                                <div className="metric__value">
-                                    {provider.altmetric?.countDownloaded ?? 0}
-                                </div>
-                            </div>
-                            <div className="metric">
-                                <div className="metric__label">
-                                    В коллекциях
-                                </div>
-                                <div className="metric__value">
-                                    {provider.altmetric
-                                        ?.includedInCollections ?? 0}
-                                </div>
-                            </div>
-                            <div className="metric">
-                                <div className="metric__label">Отзывы</div>
-                                <div className="metric__value">
-                                    {provider.altmetric?.totalReviews ?? 0}
-                                </div>
-                            </div>
-                            <div className="metric metric--wide">
-                                <div className="metric__label">
-                                    Общий балл
-                                </div>
-                                <div className="metric__value">
-                                    {provider.altmetric?.allScore ?? 0}
-                                </div>
-                            </div>
-                        </div>
+                        </Card>
 
-                        <div className="citations">
-                            <div className="citations__item">
-                                Цитирования (РИНЦ):{" "}
-                                <strong>
-                                    {provider.citirovanieInRinc ?? 0}
-                                </strong>
-                            </div>
-                            <div className="citations__item">
-                                Цитирования (ядро РИНЦ):{" "}
-                                <strong>
-                                    {provider.citirovanieInCoreRinc ?? 0}
-                                </strong>
-                            </div>
-                            <div className="citations__badges">
-                                {provider.isRinc && (
-                                    <span className="badge badge--rinc">
-                                        Входит в РИНЦ
-                                    </span>
-                                )}
-                                {provider.isCoreRinc && (
-                                    <span className="badge badge--core">
-                                        Ядро РИНЦ
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                        {/* Links */}
+                        <Card title="Ссылки">
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <a
+                                    href={url || undefined}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={
+                                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium " +
+                                        (url
+                                            ? "bg-slate-900 text-white hover:bg-slate-800"
+                                            : "bg-slate-200 text-slate-500 cursor-not-allowed pointer-events-none")
+                                    }
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Открыть PDF
+                                </a>
 
-                    <div className="card">
-                        <h2 className="card__title">Ссылки</h2>
-                        <div className="links-row">
-                            <a
-                                href={provider.pdfUrl || undefined}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={
-                                    provider.pdfUrl
-                                        ? "btn btn--primary"
-                                        : "btn btn--disabled"
-                                }
-                            >
-                                Открыть PDF
-                            </a>
-                            <a
-                                href={provider.sourceUrl || undefined}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={
-                                    provider.sourceUrl
-                                        ? "btn btn--ghost"
-                                        : "btn btn--disabled"
-                                }
-                            >
-                                Перейти к источнику
-                            </a>
-                        </div>
+                                <a
+                                    href={provider?.sourceUrl || undefined}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={
+                                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium " +
+                                        (provider?.sourceUrl
+                                            ? "border border-slate-200 text-slate-800 hover:bg-slate-50"
+                                            : "bg-slate-200 text-slate-500 cursor-not-allowed pointer-events-none")
+                                    }
+                                >
+                                    <LinkIcon className="h-4 w-4" />
+                                    Перейти к источнику
+                                </a>
+                            </div>
+                        </Card>
                     </div>
-                </section>
-            </main>
+                </div>
+            </div>
         </div>
     );
 }
 
-export default ArticleDetailsPage;
+/* ---------- UI helpers ---------- */
+
+function Card({ title, children }) {
+    return (
+        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+            <div className="p-5">
+                <div className="text-base font-semibold text-slate-900">{title}</div>
+                <div className="mt-4 space-y-4">{children}</div>
+            </div>
+        </div>
+    );
+}
+
+function ViewsDownloadsBar({ views, downloads }) {
+    const v = Math.max(0, Number(views) || 0);
+    const d = Math.max(0, Number(downloads) || 0);
+
+    const data = [
+        { name: "Просмотры", value: v },
+        { name: "Скачивания", value: d },
+    ];
+
+    const max = Math.max(v, d, 1);
+
+    return (
+        <div className="h-56 rounded-2xl border border-slate-200 bg-white p-3">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                    data={data}
+                    margin={{ top: 18, right: 12, left: 0, bottom: 8 }}
+                    barCategoryGap="35%"
+                >
+                    {/* более мягкая сетка */}
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        style={{ fontSize: 12 }}
+                    />
+                    <YAxis
+                        allowDecimals={false}
+                        tickLine={false}
+                        axisLine={false}
+                        width={28}
+                        domain={[0, Math.ceil(max * 1.2)]}
+                        style={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                        cursor={{ opacity: 0.15 }}
+                        formatter={(value) => [value, ""]}
+                    />
+                    <Bar dataKey="value" radius={[12, 12, 12, 12]}>
+                        {/* подписи значений */}
+                        <LabelList dataKey="value" position="top" style={{ fontSize: 12 }} />
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+function ChipDark({ children }) {
+    return (
+        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/15">
+      {children}
+    </span>
+    );
+}
+
+function Pill({ children, outline }) {
+    return (
+        <span
+            className={
+                "rounded-full px-3 py-1 text-xs font-medium " +
+                (outline
+                    ? "border border-slate-200 bg-white text-slate-700"
+                    : "bg-slate-100 text-slate-700")
+            }
+        >
+      {children}
+    </span>
+    );
+}
+
+function InfoRow({ label, value }) {
+    return (
+        <div className="rounded-xl border border-slate-200 p-3">
+            <div className="text-xs text-slate-600">{label}</div>
+            <div className="text-sm font-medium mt-1 break-words text-slate-900">
+                {value}
+            </div>
+        </div>
+    );
+}
+
+function Metric({ label, value }) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div className="text-xs text-slate-600">{label}</div>
+            <div className="text-lg font-semibold leading-6 mt-1 text-slate-900">
+                {value}
+            </div>
+        </div>
+    );
+}
+
+function MetricWide({ label, value, Icon }) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-slate-600">{label}</div>
+                {Icon ? <Icon className="h-4 w-4 text-slate-500" /> : null}
+            </div>
+            <div className="text-lg font-semibold leading-6 mt-1 text-slate-900">
+                {value}
+            </div>
+        </div>
+    );
+}

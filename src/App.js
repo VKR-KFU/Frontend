@@ -1,43 +1,65 @@
-import './App.css';
+import "./App.css";
 import {BrowserRouter, Route, Routes, useNavigate} from "react-router-dom";
-import ArticlesPage from "./pages/ArticlesPage";
-import AppLayout from "./components/layout/AppLayout";
-import ArticleDetailsPage from "./pages/ArticleDetailsPage";
-import ArticleToastContainer from "./components/common/ArticleToastContainer";
 import {useCallback, useEffect, useState} from "react";
-import {getSignalRConnection} from "./signalrConnection";
+
+import ArticlesPage from "./pages/ArticlesPage";
+import ArticleDetailsPage from "./pages/ArticleDetailsPage";
 import AuthorProfilePage from "./pages/AuthorProfilePage";
 import AuthorsPage from "./pages/AuthorsPage";
 
+import RegisterPage from "./pages/RegisterPage";
+import LoginPage from "./pages/LoginPage";
+import UserProfilePage from "./pages/UserProfilePage";
+
+import AppLayout from "./components/layout/AppLayout";
+import ArticleToastContainer from "./components/common/ArticleToastContainer";
+import ErrorToastContainer from "./components/common/ErrorToastContainer";
+import {setToastHandler} from "./toast/toastBus";
+import {getSignalRConnection} from "./signalrConnection";
+
+import RequireAuth from "./auth/RequireAuth";
+import {AuthProvider} from "./auth/AuthProvider";
+import AdminClaimsPage from "./pages/AdminClaimsPage";
+import RequireRole from "./auth/RequireRole";
+
 function AppInner() {
-  const [toasts, setToasts] = useState([]);
-  const navigate = useNavigate();
+    const [toasts, setToasts] = useState([]);
+    const [errorToasts, setErrorToasts] = useState([]);
+    const navigate = useNavigate();
 
-  const showArticleUpdatedToast = useCallback((articleId, title) => {
-      console.log(`мы получили идентификатор обновленной статьи ${articleId}`);
-    setToasts((prev) => [
-      ...prev,
-      {
-        id: articleId,
-        title: title || "Данные статьи были обновлены",
-      },
-    ]);
-  }, []);
+    useEffect(() => {
+        setToastHandler((toast) => {
+            const id = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+            setErrorToasts((prev) => [...prev, {id, ...toast}]);
 
-  const handleToastClick = useCallback(
-      (articleId) => {
-        navigate(`/article/${articleId}`);
-      },
-      [navigate]
-  );
+            window.setTimeout(() => {
+                setErrorToasts((prev) => prev.filter((x) => x.id !== id));
+            }, 4000);
+        });
+    }, []);
 
-  const handleToastClose = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+    const closeErrorToast = useCallback((id) => {
+        setErrorToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
+
+    const showArticleUpdatedToast = useCallback((articleId, title) => {
+        setToasts((prev) => [
+            ...prev,
+            {id: articleId, title: title || "Данные статьи были обновлены"},
+        ]);
+    }, []);
+
+    const handleToastClick = useCallback(
+        (articleId) => navigate(`/article/${articleId}`),
+        [navigate]
+    );
+
+    const handleToastClose = useCallback((id) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
 
     useEffect(() => {
         const connection = getSignalRConnection();
-
         let started = false;
 
         const start = async () => {
@@ -53,7 +75,6 @@ function AppInner() {
         };
 
         const handler = (payload) => {
-            console.log(`мы получили идентификатор обновленной статьи ${payload.articleProviderId}`);
             showArticleUpdatedToast(payload.articleProviderId, payload.title);
         };
 
@@ -65,34 +86,46 @@ function AppInner() {
         };
     }, [showArticleUpdatedToast]);
 
-  return (
-      <>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<ArticlesPage />} />
-            <Route path="/article/:id" element={<ArticleDetailsPage />} />
-            <Route path="/author/:id"  element={<AuthorProfilePage />} />
-            <Route path={"/authors"} element={<AuthorsPage />} />
-          </Routes>
-        </AppLayout>
+    return (
+        <>
+            <Routes>
+                <Route path="/login" element={<LoginPage/>}/>
+                <Route path="/register" element={<RegisterPage/>}/>
 
-        <ArticleToastContainer
-            toasts={toasts}
-            onToastClick={handleToastClick}
-            onToastClose={handleToastClose}
-        />
-      </>
-  );
+                <Route element={<AppLayout/>}>
+                    <Route path="/" element={<ArticlesPage/>}/>
+                    <Route path="/article/:id" element={<ArticleDetailsPage/>}/>
+                    <Route path="/author/:id" element={<AuthorProfilePage/>}/>
+                    <Route path="/authors" element={<AuthorsPage/>}/>
+
+                    <Route element={<RequireAuth/>}>
+                        <Route path="/me" element={<UserProfilePage/>}/>
+                    </Route>
+
+                    <Route element={<RequireRole roles={["Admin"]}/>}>
+                        <Route path="/admin/claims" element={<AdminClaimsPage/>}/>
+                    </Route>
+
+                    <Route path="*" element={<div className="p-6">Страница не найдена</div>}/>
+                </Route>
+            </Routes>
+
+            <ArticleToastContainer toasts={toasts} onToastClick={handleToastClick} onToastClose={handleToastClose}/>
+            <ErrorToastContainer toasts={errorToasts} onClose={closeErrorToast}/>
+        </>
+    );
 }
 
 function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <AppInner />
-      </BrowserRouter>
-    </div>
-  );
+    return (
+        <div className="App">
+            <BrowserRouter>
+                <AuthProvider>
+                    <AppInner/>
+                </AuthProvider>
+            </BrowserRouter>
+        </div>
+    );
 }
 
 export default App;

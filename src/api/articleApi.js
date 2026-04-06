@@ -8,6 +8,10 @@ export function getArticleById(id) {
     return apiClient.get(`/Article/${id}`).then((res) => res.data);
 }
 
+export function pdfDownloaded(id) {
+    return apiClient.get(`/Article/${id}/pdf-clicked`).then((res) => res.data);
+}
+
 // filters api
 
 export function getFilters() {

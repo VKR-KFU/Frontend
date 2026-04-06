@@ -6,16 +6,16 @@ import Pagination from "../components/common/Pagination";
 import { useNavigate } from "react-router-dom";
 import { Search, Filter, X } from "lucide-react";
 
+import TopArticlesSidebar from "../components/articles/TopArticlesSidebar";
+
 const PAGE_SIZE = 20;
 
 const INITIAL_FILTERS = {
-    // Автор
     authorName: "",
     authorOrg: "",
     authorDepartment: "",
     authorSpin: "",
 
-    // Публикация / источник
     year: "",
     source: "",
     universityName: "",
@@ -23,17 +23,14 @@ const INITIAL_FILTERS = {
     language: "",
     edn: "",
 
-    // Доп инф.
     hasFull: false,
 
-    // Аннотации и ключевые слова
     abstractRuText: "",
     abstractEnText: "",
     hasAbstractRu: false,
     hasAbstractEn: false,
     keywordsText: [],
 
-    // Индексация / классификация
     isRinc: false,
     isCoreRinc: false,
     oecdCodeName: "",
@@ -41,12 +38,10 @@ const INITIAL_FILTERS = {
     vakCodeName: "",
     patents: "",
 
-    // Метрики
     minViews: "",
     minCitationsRinc: "",
     minCitirovanieInCoreRinc: "",
 
-    // Альтметрики
     altmetricAllScoreMin: "",
     altmetricViewsMin: "",
     altmetricDownloadsMin: "",
@@ -55,10 +50,7 @@ const INITIAL_FILTERS = {
 };
 
 export default function ArticlesPage() {
-    // поиск по названию (у тебя переменная title)
     const [title, setTitle] = useState("");
-
-    // фильтры
     const [filters, setFilters] = useState(INITIAL_FILTERS);
 
     const [items, setItems] = useState([]);
@@ -70,7 +62,6 @@ export default function ArticlesPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // открыто ли модальное окно фильтров
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
     const navigate = useNavigate();
@@ -89,21 +80,13 @@ export default function ArticlesPage() {
                 },
             ],
             altmetric: {
-                allScoreMin: filters.altmetricAllScoreMin
-                    ? Number(filters.altmetricAllScoreMin)
-                    : undefined,
-                viewsMin: filters.altmetricViewsMin
-                    ? Number(filters.altmetricViewsMin)
-                    : undefined,
-                downloadsMin: filters.altmetricDownloadsMin
-                    ? Number(filters.altmetricDownloadsMin)
-                    : undefined,
+                allScoreMin: filters.altmetricAllScoreMin ? Number(filters.altmetricAllScoreMin) : undefined,
+                viewsMin: filters.altmetricViewsMin ? Number(filters.altmetricViewsMin) : undefined,
+                downloadsMin: filters.altmetricDownloadsMin ? Number(filters.altmetricDownloadsMin) : undefined,
                 includedInCollectionsMin: filters.altmetricIncludedInCollectionsMin
                     ? Number(filters.altmetricIncludedInCollectionsMin)
                     : undefined,
-                totalReviewsMin: filters.altmetricTotalReviewsMin
-                    ? Number(filters.altmetricTotalReviewsMin)
-                    : undefined,
+                totalReviewsMin: filters.altmetricTotalReviewsMin ? Number(filters.altmetricTotalReviewsMin) : undefined,
             },
             articleDetails: {
                 year: filters.year ? Number(filters.year) : undefined,
@@ -113,12 +96,8 @@ export default function ArticlesPage() {
                 edn: filters.edn || undefined,
                 patents: filters.patents || undefined,
 
-                ruAnnotation:
-                    filters.abstractRuText ||
-                    (filters.hasAbstractRu ? "__NOT_EMPTY__" : undefined),
-                enAnnotation:
-                    filters.abstractEnText ||
-                    (filters.hasAbstractEn ? "__NOT_EMPTY__" : undefined),
+                ruAnnotation: filters.abstractRuText || (filters.hasAbstractRu ? "__NOT_EMPTY__" : undefined),
+                enAnnotation: filters.abstractEnText || (filters.hasAbstractEn ? "__NOT_EMPTY__" : undefined),
 
                 language: filters.language || undefined,
 
@@ -129,9 +108,7 @@ export default function ArticlesPage() {
                 asjcCodeName: filters.asjcCodeName || undefined,
                 vakCodeName: filters.vakCodeName || undefined,
                 minViews: filters.minViews ? Number(filters.minViews) : undefined,
-                minCitationsRinc: filters.minCitationsRinc
-                    ? Number(filters.minCitationsRinc)
-                    : undefined,
+                minCitationsRinc: filters.minCitationsRinc ? Number(filters.minCitationsRinc) : undefined,
                 minCitirovanieInCoreRinc: filters.minCitirovanieInCoreRinc
                     ? Number(filters.minCitirovanieInCoreRinc)
                     : undefined,
@@ -176,7 +153,6 @@ export default function ArticlesPage() {
         console.log("open provider details", articleId, providerId, provider);
     };
 
-    // маленький индикатор “фильтры активны”
     const filtersActive = useMemo(() => {
         const f = filters;
 
@@ -229,12 +205,9 @@ export default function ArticlesPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div className="text-white">
                             <div className="text-sm text-white/80">Публикации</div>
-                            <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight">
-                                Поиск статей
-                            </h1>
+                            <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight">Поиск статей</h1>
                             <div className="mt-1 text-sm text-white/80">
-                                Ищи по названию и используй расширенные фильтры (авторы, источники,
-                                метрики и т.д.)
+                                Ищи по названию и используй расширенные фильтры (авторы, источники, метрики и т.д.)
                             </div>
                         </div>
 
@@ -251,9 +224,7 @@ export default function ArticlesPage() {
                 <span className="inline-flex items-center gap-2">
                   <Filter className="h-4 w-4" />
                   Фильтры
-                    {filtersActive ? (
-                        <span className="ml-1 inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                    ) : null}
+                    {filtersActive ? <span className="ml-1 inline-flex h-2 w-2 rounded-full bg-emerald-500" /> : null}
                 </span>
                             </button>
 
@@ -297,73 +268,64 @@ export default function ArticlesPage() {
                         <div className="mt-3 flex items-center justify-between text-sm text-white/80">
                             <div>
                                 Найдено:{" "}
-                                <span className="font-semibold text-white">
-                  {loading ? "..." : totalCount}
-                </span>
+                                <span className="font-semibold text-white">{loading ? "..." : totalCount}</span>
                             </div>
-                            <div className="hidden sm:block">
-                                Нажми Enter или кнопку фильтров, чтобы обновить выдачу
-                            </div>
+                            <div className="hidden sm:block">Нажми Enter или кнопку фильтров, чтобы обновить выдачу</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Results */}
+            {/* Results (✅ grid + sidebar) */}
             <div className="mx-auto max-w-6xl px-4 py-10">
-                {loading && (
-                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-8 text-center text-slate-600">
-                        Загрузка…
-                    </div>
-                )}
-
-                {error && !loading && (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
-                        {error}
-                    </div>
-                )}
-
-                {!loading && !error && items.length === 0 && (
-                    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-10 text-center">
-                        <div className="mx-auto max-w-md space-y-2">
-                            <div className="text-lg font-semibold text-slate-900">
-                                Ничего не найдено
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left: list */}
+                    <div className="lg:col-span-8">
+                        {loading && (
+                            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-8 text-center text-slate-600">
+                                Загрузка…
                             </div>
-                            <div className="text-sm text-slate-600">
-                                Попробуйте изменить запрос или фильтры.
+                        )}
+
+                        {error && !loading && (
+                            <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">{error}</div>
+                        )}
+
+                        {!loading && !error && items.length === 0 && (
+                            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-10 text-center">
+                                <div className="mx-auto max-w-md space-y-2">
+                                    <div className="text-lg font-semibold text-slate-900">Ничего не найдено</div>
+                                    <div className="text-sm text-slate-600">Попробуйте изменить запрос или фильтры.</div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                )}
+                        )}
 
-                {!loading && !error && items.length > 0 && (
-                    <div className="space-y-4">
-                        {items.map((article) => (
-                            <ArticleCard
-                                key={article.id}
-                                article={article}
-                                onOpenProvider={handleOpenProvider}
-                            />
-                        ))}
-                    </div>
-                )}
+                        {!loading && !error && items.length > 0 && (
+                            <div className="space-y-4">
+                                {items.map((article) => (
+                                    <ArticleCard key={article.id} article={article} onOpenProvider={handleOpenProvider} />
+                                ))}
+                            </div>
+                        )}
 
-                {!loading && !error && totalPages > 1 && (
-                    <div className="mt-6">
-                        <Pagination
-                            page={page}
-                            totalPages={totalPages}
-                            onChange={(newPage) => loadData(newPage)}
-                        />
+                        {!loading && !error && totalPages > 1 && (
+                            <div className="mt-6">
+                                <Pagination page={page} totalPages={totalPages} onChange={(newPage) => loadData(newPage)} />
+                            </div>
+                        )}
                     </div>
-                )}
+
+                    {/* Right: sidebar */}
+                    <div className="lg:col-span-4 space-y-6">
+                        {/* basePath="/article" потому что у тебя navigate(`/article/${providerId}`) */}
+                        <TopArticlesSidebar basePath="/article" limit={5} />
+                    </div>
+                </div>
             </div>
 
+            {/* Filters modal */}
             {isFiltersOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-                    onClick={() => setIsFiltersOpen(false)}
-                >
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setIsFiltersOpen(false)}>
                     <div className="absolute inset-0 bg-black/40" />
 
                     <div
@@ -371,13 +333,10 @@ export default function ArticlesPage() {
                  max-h-[85vh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Header (не скроллится) */}
                         <div className="flex items-start justify-between p-5 border-b border-slate-200">
                             <div>
                                 <div className="text-lg font-semibold text-slate-900">Фильтры</div>
-                                <div className="mt-1 text-sm text-slate-600">
-                                    Настрой параметры и нажми “Применить”.
-                                </div>
+                                <div className="mt-1 text-sm text-slate-600">Настрой параметры и нажми “Применить”.</div>
                             </div>
 
                             <button
@@ -389,7 +348,6 @@ export default function ArticlesPage() {
                             </button>
                         </div>
 
-                        {/* Body (скроллится) */}
                         <div className="p-5 overflow-y-auto">
                             <ArticleFilters
                                 {...filters}
