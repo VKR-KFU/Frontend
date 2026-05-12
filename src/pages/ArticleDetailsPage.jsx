@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import {getArticleById, pdfDownloaded} from "../api/articleApi";
+import {getArticleById, getSimilarArticles, pdfDownloaded} from "../api/articleApi";
 
 import * as signalR from "@microsoft/signalr";
 import { getSignalRConnection } from "../signalrConnection";
@@ -14,8 +14,9 @@ import {
     GraduationCap,
     Link as LinkIcon,
     ShieldCheck,
-    Star,
     Download,
+    Sparkles,
+    ChevronRight,
 } from "lucide-react";
 import {getArticleDetailStatistic} from "../api/articleStatisticApi";
 import {
@@ -43,6 +44,8 @@ export default function ArticleDetailsPage() {
     // уведомления
     const [notifySubscribed, setNotifySubscribed] = useState(false);
     const [notifyLoading, setNotifyLoading] = useState(false);
+
+    const [similar, setSimilar] = useState({ items: [], loading: false, error: null });
 
     // 1) загрузка статьи
     useEffect(() => {
@@ -119,6 +122,32 @@ export default function ArticleDetailsPage() {
             connection.off("NotifyArticleUpdated", handler);
         };
     }, [id, providerId]);
+
+    useEffect(() => {
+        if (!id) return;
+        let cancelled = false;
+        setSimilar({ items: [], loading: true, error: null });
+        getSimilarArticles(id, 10)
+            .then((data) => {
+                if (cancelled) return;
+                setSimilar({
+                    items: Array.isArray(data?.items) ? data.items : [],
+                    loading: false,
+                    error: null,
+                });
+            })
+            .catch((e) => {
+                if (cancelled) return;
+                setSimilar({
+                    items: [],
+                    loading: false,
+                    error: e?.message || "Не удалось загрузить похожие публикации",
+                });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);
 
     const handleClick = () => {
         pdfDownloaded(id).catch(() => {});
@@ -464,6 +493,63 @@ export default function ArticleDetailsPage() {
                                 </div>
                                 <ViewsDownloadsBar views={viewsCount} downloads={pdfDownloadsCount} />
                             </div>
+                        </Card>
+
+                        <Card title="Интеллектуальная поддержка: похожие публикации">
+                            <p className="text-xs text-slate-600 -mt-2 mb-3">
+                                Ранжирование по пересечению ключевых слов и лексическому сходству заголовка и аннотаций
+                                (PostgreSQL, расширение{" "}
+                                <span className="font-mono text-slate-800">pg_trgm</span>).
+                            </p>
+                            {similar.loading ? (
+                                <div className="text-sm text-slate-600">Подбор похожих…</div>
+                            ) : similar.error ? (
+                                <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                                    {similar.error}
+                                </div>
+                            ) : similar.items.length === 0 ? (
+                                <div className="text-sm text-slate-600">
+                                    Похожие записи не найдены (мало данных или низкая схожесть).
+                                </div>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {similar.items.map((item) => (
+                                        <li key={item.providerId}>
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/article/${item.providerId}`)}
+                                                className="w-full text-left rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-100 transition px-3 py-2.5 group"
+                                            >
+                                                <div className="flex items-start gap-2">
+                                                    <Sparkles className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-sm font-medium text-slate-900 leading-snug break-words group-hover:underline">
+                                                            {item.title}
+                                                        </div>
+                                                        <div className="mt-1 flex flex-wrap gap-1.5 items-center">
+                                                            {item.year != null ? (
+                                                                <Pill outline>{item.year}</Pill>
+                                                            ) : null}
+                                                            {item.source ? <Pill outline>{item.source}</Pill> : null}
+                                                            <Pill outline>
+                                                                Ключ. слова: {item.keywordOverlap}
+                                                            </Pill>
+                                                            <Pill outline>
+                                                                Лексика:{" "}
+                                                                {Math.round((item.textSimilarity || 0) * 100)}%
+                                                            </Pill>
+                                                            <Pill outline>
+                                                                Итог: {Math.round((item.combinedScore || 0) * 100)}%
+                                                            </Pill>
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 mt-1" />
+                                                </div>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </Card>
 
                         {/* Links */}
